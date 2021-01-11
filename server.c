@@ -9,17 +9,88 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#include "server.h"
-
 #define NAMELEN 31
 #define SENDLEN 201
 #define MSGLEN 101
 #define PORT 19073
+#define KEY 7
+
+void strTrimLF(char *arr, int len) {
+    int i;
+    for(i=0;i<len;i++) {
+        if(arr[i] == '\n') {
+            arr[i] = '\0';
+            break;
+        }
+    }
+}
+
+void strOverWrites() {
+    printf("\r%s", "> ");
+    fflush(stdout);
+}
+
+char *encode(char *buffer, int len) {
+    char *temp = (char*)malloc(sizeof(char)*len);
+
+    for(size_t i=0;i<len;i++) {
+        temp[i] = buffer[i] + KEY;
+    }
+
+    return temp;
+}
+
+char *decode(char *buffer, int len) {
+    char *temp = (char*)malloc(sizeof(char)*len);
+
+    for(size_t i=0;i<len;i++) {
+        temp[i] = buffer[i] - KEY;
+    }
+
+    return temp;
+}
+
+typedef struct ClientNode {
+    int data;
+    struct ClientNode *prev;
+    struct ClientNode *link;
+    char ip[16];
+    char name[35];
+}CliList;
+
+CliList *newCli(int sockFd, char *ip) {
+    CliList *tmp = (CliList*)malloc(sizeof(CliList));
+
+    tmp->data = sockFd;
+    tmp->prev = NULL;
+    tmp->link = NULL;
+    strncpy(tmp->ip, ip, 16);
+    strncpy(tmp->name, "NULL", 5);
+
+    return tmp;
+}
+
 
 int serverFd = 0;
 int clientFd = 0;
 
 CliList *root, *current;
+
+FILE *file;
+
+void initFile() {
+	file = fopen("userInfo.txt", "w+");
+}
+
+void writesFile(char *name, char *ip, int data) {
+	static int user = 1;
+
+	if(file != NULL) {
+		fprintf(file, "USER %d >> %s  %s  %d\n", user++, name, ip, data);
+	} else {
+		printf("\nFile is error!\n");
+	}
+}
 
 void ctrlExit(int sig) {
 	CliList *tmp;
@@ -36,7 +107,6 @@ void ctrlExit(int sig) {
 	printf("\nBye :)\n\n");
 	exit(EXIT_SUCCESS);
 }
-
 
 void sendToAll(CliList *cli, char *buffer) {
 	CliList *tmp = root->link;
@@ -57,17 +127,21 @@ void cliHandler(void *cli) {
 	char recvBuffer[MSGLEN] = {};
 	char sendBuffer[SENDLEN] = {};
 
+	char color[10];
+	sprintf(color, "\e[%dm", (int)rand()%(37-30)-30);
+
 	CliList *tmp = (CliList*)cli;
 
 
 	if(recv(tmp->data, nickName, NAMELEN, 0) <= 0 ||
 		strlen(nickName) < 2 || strlen(nickName) >= NAMELEN-1) {
-			printf("\n%s didn't input name.\n", tmp->ip);
+			printf("\n%s ismini girmedi.\n", tmp->ip);
 			leaveFlag = 1;
 	} else {
 		strncpy(tmp->name, nickName, NAMELEN);
-		printf("\n%s(%s)(%d) join the chatroom.\n", tmp->name, tmp->ip, tmp->data);
-		sprintf(sendBuffer, "%s(%s) join the chatroom.", tmp->name, tmp->ip);
+		printf("\e[93m[++] \e[92m%s(%s)(%d) \e[94mSohbete katildi.\n\n", tmp->name, tmp->ip, tmp->data);
+		writesFile(tmp->name, tmp->ip, tmp->data);
+		sprintf(sendBuffer, "%s(%s) Sohbete katildi.", tmp->name, tmp->ip);
 
 		sendToAll(tmp, sendBuffer);
 	}
@@ -84,8 +158,8 @@ void cliHandler(void *cli) {
 
 			sprintf(sendBuffer, "%s: %s from %s", tmp->name, recvBuffer, tmp->ip);
 		} else if(receive == 0 || strcmp(recvBuffer, "exit") == 0) {
-			printf("%s(%s)(%d) leave the chatroom.\n", tmp->name, tmp->ip, tmp->data);
-			sprintf(sendBuffer,"%s(%s) leave the chatroom.", tmp->name, tmp->ip);
+			printf("\e[92m%s(%s)(%d) \e[91mSohbetten ayrildi.\n\n", tmp->name, tmp->ip, tmp->data);
+			sprintf(sendBuffer,"\e[92m%s(%s) \e[91mSohbetten ayrildi.", tmp->name, tmp->ip);
 			leaveFlag = 1;
 		} else {
 			printf("\nFatal error : -1\n");
@@ -118,6 +192,8 @@ int main() {
 		exit(EXIT_FAILURE);
 	}
 
+	initFile();
+
 	struct sockaddr_in serverInfo, clientInfo;
 
 	int addrlenServ = sizeof(serverInfo);
@@ -146,7 +222,7 @@ int main() {
 
 		getpeername(clientFd, (struct sockaddr*)&clientInfo, (socklen_t*)&addrlenCli);
 
-		printf("\nClient %s:%d come in.\n", inet_ntoa(clientInfo.sin_addr), ntohs(clientInfo.sin_port));
+		printf("\n\e[90m[*CLIENT*] \e[92m%s:%d \e[93mKATILDI.\n", inet_ntoa(clientInfo.sin_addr), ntohs(clientInfo.sin_port));
 
 		CliList *cmp = newCli(clientFd, inet_ntoa(clientInfo.sin_addr));
 
@@ -162,5 +238,6 @@ int main() {
 		}
 	}
 
+	fclose(file);
 	return 0;
 }

@@ -9,12 +9,46 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#include "All.h"
-
 #define NAMELEN 31
 #define MSGLEN 101
 #define SENDLEN 201
 #define PORT 19073
+#define KEY 7
+
+void strTrimLF(char *arr, int len) {
+    int i;
+    for(i=0;i<len;i++) {
+        if(arr[i] == '\n') {
+            arr[i] = '\0';
+            break;
+        }
+    }
+}
+
+void strOverWrites() {
+    printf("\r\e[90m%s", "> ");
+    fflush(stdout);
+}
+
+char *encode(char *buffer, int len) {
+    char *temp = (char*)malloc(sizeof(char)*len);
+
+    for(size_t i=0;i<len;i++) {
+        temp[i] = buffer[i] + KEY;
+    }
+
+    return temp;
+}
+
+char *decode(char *buffer, int len) {
+    char *temp = (char*)malloc(sizeof(char)*len);
+
+    for(size_t i=0;i<len;i++) {
+        temp[i] = buffer[i] - KEY;
+    }
+
+    return temp;
+}
 
 volatile sig_atomic_t flag = 0;
 
@@ -30,7 +64,7 @@ void recvMsgHandler() {
 		int receive = recv(sockfd, receiveMessage, SENDLEN, 0);
 
 		if(receive > 0) {
-			printf("\r%s\n", receiveMessage);
+			printf("\r\e[94m%s\n", receiveMessage);
 			strOverWrites();
 		} else if(receive == 0) {
 			break;
@@ -106,7 +140,7 @@ int main() {
 	getsockname(sockfd, (struct sockaddr*)&clientInfo, (socklen_t*)&addrlenServ);
 	getpeername(sockfd, (struct sockaddr*)&serverInfo, (socklen_t*)&addrlenServ);
 
-	printf("\nConnect to server: %s:%d\n", inet_ntoa(serverInfo.sin_addr), ntohs(serverInfo.sin_port));
+	printf("\n\e[93m[++]Connect to server: %s:%d\n", inet_ntoa(serverInfo.sin_addr), ntohs(serverInfo.sin_port));
 	printf("\nYou are: %s:%d\n", inet_ntoa(clientInfo.sin_addr), ntohs(clientInfo.sin_port));
 
 	send(sockfd, nickName, NAMELEN, 0);
